@@ -8,9 +8,7 @@ import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.repository.ListCrudRepository;
-import org.springframework.http.codec.multipart.FilePartEvent;
-import org.springframework.http.codec.multipart.FormPartEvent;
-import org.springframework.http.codec.multipart.PartEvent;
+import org.springframework.http.codec.multipart.*;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.RouterFunction;
@@ -20,11 +18,11 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA;
 import static org.springframework.web.reactive.function.server.RequestPredicates.contentType;
@@ -56,49 +54,35 @@ class FileHandler {
 		Map<String, Flux<DataBuffer>> fileData = new HashMap<>();
 
 		return request
-				.bodyToFlux(PartEvent.class)
-				.windowUntil(PartEvent::isLast)
-				.concatMap(p -> p.switchOnFirst((signal, partEvents) -> {
-					if (signal.hasValue()) {
-						PartEvent event = signal.get();
-						if (event instanceof FormPartEvent formEvent) {
-							System.out.println("FormPartEvent: " + formEvent.name() + " " + formEvent.value());
-							formData.put(formEvent.name(), formEvent.value());
-						}
-						else if (event instanceof FilePartEvent fileEvent) {
-							String filename = fileEvent.filename();
-							Flux<DataBuffer> contents = partEvents.map(PartEvent::content);
-							System.out.println("FilePartEvent: " + filename);
-							fileData.put(filename, contents);
-						}
-						else {
-							return Mono.error(new RuntimeException("Unexpected event: " + event));
-						}
-						return Mono.empty();
-					}
-					else {
-						return Mono.error(new RuntimeException("Unexpected signal: " + signal));
-					}
-				}))
-				.then(Objects.requireNonNull(personMapper(formData, fileData)))
-				.flatMap(fileService::save)
-				.flatMap(person -> ServerResponse.ok().bodyValue(person));
-	}
+				.multipartData()
+				.flatMap(stringPartMultiValueMap -> {
+					var nameFormFiledPart = (FormFieldPart) stringPartMultiValueMap.get("name").getFirst();
+					var name = nameFormFiledPart.value();
 
-	private Mono<Person> personMapper(Map<String, String> formData, Map<String, Flux<DataBuffer>> fileData) {
+					var ageFormFiledPart = (FormFieldPart) stringPartMultiValueMap.get("age").getFirst();
+					var age = ageFormFiledPart.value();
 
-		//return Mono.fromCallable(() -> new Person(null, formData.get("name"), Integer.parseInt(formData.get("age")), null));
+					var files = stringPartMultiValueMap.get("files").stream().map(part -> (FilePart) part).toList();
 
-		return Flux.fromIterable(fileData.entrySet())
-				.flatMap(entry -> {
-					String filename = entry.getKey();
-					Flux<DataBuffer> content = entry.getValue();
-					//return DataBufferUtils.join(content).map(dataBuffer -> new Documents(null, filename, null, dataBuffer.asByteBuffer().array()));
-					return Mono.fromCallable(() -> new Documents(null, filename, null, "".getBytes(StandardCharsets.UTF_8)));
+					System.out.printf("%s- %s - %s".formatted(name, age, files.stream().map(f -> f.filename()).toList()));
+
+					/*var docs = files
+							.stream()
+							.map(filePart ->  new Documents(null, filePart.filename(), null, null))
+							.collect(Collectors.toSet());
+					return new Person(null,name, Integer.parseInt(age), docs);*/
+
+					return Flux.fromIterable(files)
+							.flatMap(f -> {
+								return DataBufferUtils.join(f.content()).map(dataBuffer -> new Documents(null, f.filename(), null, dataBuffer.asByteBuffer().array()));
+								//return Mono.fromCallable(() -> db);
+							})
+							.collectList()
+							.map(Set::copyOf)
+							.map(documents -> new Person(null, name, Integer.parseInt(age), documents));
 				})
-				.collectList()
-				.map(Set::copyOf)
-				.map(documents -> new Person(null, formData.get("name"), Integer.parseInt(formData.get("age")), documents));
+				.flatMap(fileService::save)
+				.flatMap(p -> ServerResponse.ok().bodyValue(p));
 	}
 }
 
