@@ -12,6 +12,10 @@ import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.http.codec.multipart.FormFieldPart;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.reactive.CorsWebFilter;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -34,9 +38,25 @@ public class WebfluxFileUploadDownloadApplication {
 	}
 
 	@Bean
+	CorsWebFilter corsFilter() {
+		CorsConfiguration config = new CorsConfiguration();
+		config.addAllowedOriginPattern("*");
+		config.addAllowedHeader("*");
+		config.addAllowedMethod("*");
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+
+		return new CorsWebFilter(source);
+	}
+
+	@Bean
 	RouterFunction<ServerResponse> routerFunction(FileHandler fileHandler) {
 		return RouterFunctions
 				.route()
+				.path("/person", builder -> builder
+						.POST("", contentType(MULTIPART_FORM_DATA), fileHandler::upload)
+						.GET("", fileHandler::fetchAll))
 				.POST("/upload", contentType(MULTIPART_FORM_DATA), fileHandler::upload)
 				.build();
 	}
@@ -83,6 +103,13 @@ class FileHandler {
 				.flatMap(fileService::save)
 				.flatMap(p -> ServerResponse.ok().bodyValue(p));
 	}
+
+	public Mono<ServerResponse> fetchAll(ServerRequest request) {
+		return fileService
+				.fetchAll()
+				.collectList()
+				.flatMap(ServerResponse.ok()::bodyValue);
+	}
 }
 
 interface PersonRepository extends ListCrudRepository<Person, Integer> {}
@@ -91,8 +118,13 @@ interface PersonRepository extends ListCrudRepository<Person, Integer> {}
 @RequiredArgsConstructor
 class FileService {
 	final PersonRepository personRepository;
-	public Mono<?> save(Person person) {
+
+	public Mono<Person> save(Person person) {
 		return Mono.fromCallable(() -> personRepository.save(person));
+	}
+
+	public Flux<Person> fetchAll() {
+		return Flux.fromIterable(personRepository.findAll());
 	}
 }
 

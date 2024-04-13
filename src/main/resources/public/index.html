@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>File Operation</title>
+    <style>
+        body {
+            margin-left: auto;
+            margin-right: auto;
+            width: 60%;
+            font-family: cursive;
+        }
+        label {
+
+        }
+        input, button {
+            margin-top: 20px;
+            height: 30px;
+            margin-left: 10px;
+        }
+        table, tr, td, td {
+            border: 1px solid gray;
+        }
+    </style>
+</head>
+<body>
+    <h1>Person Management</h1>
+    <hr />
+    <div id="app">
+        <section>
+            <form @submit.prevent="savePerson">
+                <fieldset>
+                    <legend>New Person:</legend>
+                    <label>
+                        <input type="text" placeholder="Person Id" disabled v-model="person.id"/>
+                    </label><br/>
+                    <label>
+                        <input type="text" placeholder="Person Name" v-model="person.name"/>
+                    </label><br/>
+                    <label>
+                        <input type="number" placeholder="Person Age" v-model="person.age"/>
+                    </label><br/>
+                    <label>
+                        <input type="file" placeholder="Select one or more file" multiple @change="(e) => person.files = e.target.files"/>
+                    </label><br/>
+                    <button type="submit">Submit</button>
+                    <button type="reset">Reset</button>
+                </fieldset>
+            </form>
+        </section>
+        <section>
+            <p v-if="persons.length == 0">No data found</p>
+            <table v-else>
+                <caption>Person Result:</caption>
+                <thead>
+                    <tr>
+                        <th>Id</th>
+                        <th>Name</th>
+                        <th>Age</th>
+                        <th>Documents</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template v-for="p in persons">
+                        <tr>
+                            <td>{{ p.id }}</td>
+                            <td>{{ p.name }}</td>
+                            <td>{{ p.age }}</td>
+                            <td>expand</td>
+                        </tr>
+                        <tr>
+                            <td colspan="4">
+                                supported row
+<!--                                <pre>{{ p.documents }}</pre>-->
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+                <tfoot>
+                </tfoot>
+            </table>
+        </section>
+
+    </div>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script>
+        const { createApp, ref, onMounted } = Vue
+        const apiHost = 'http://localhost:8080'
+        createApp({
+            setup() {
+                const message = ref('Hello vue!')
+                const person = ref({})
+                const persons = ref([])
+
+                const savePerson = () => {
+                    console.log(person.value)
+                    const formData = new FormData();
+                    //formData.append("id", person.id)
+                    formData.append("name", person.value.name)
+                    formData.append("age", person.value.age)
+                    formData.append("files", person.value.files)
+                    //formData.keys().forEach(k => console.log(`${k} - ${formData.get(k)}`))
+                    persistPerson(formData)
+                }
+
+                const persistPerson = (formData) => {
+                    fetch(`${apiHost}/person`, {
+                        method: 'POST',
+                        body: formData
+                    }).then(response => {
+                        if(response.ok)
+                            return response.json()
+                        throw new Error("Error While Persist the data!")
+                    }).then(data => {
+                        console.log(data)
+                        person.value = {}
+                        allPerson();
+                    })
+                }
+
+                const allPerson = () => {
+                    fetch(`${apiHost}/person`)
+                        .then(response => {
+                            if(response.ok)
+                                return response.json()
+                            throw new Error("Error While fetching data")
+                        }).then(data => persons.value = data)
+                }
+
+                onMounted(() => {
+                    allPerson()
+                })
+
+                return {
+                    message, person, persons, savePerson
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
