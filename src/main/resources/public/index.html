@@ -21,8 +21,26 @@
             height: 30px;
             margin-left: 10px;
         }
-        table, tr, td, td {
-            border: 1px solid gray;
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border-spacing: 0;
+        }
+        tr {
+            height: 50px;
+            padding: auto;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        th, td {
+            text-align: center;
+            padding: 8px;
+            border: 1px solid #dddddd;
+        }
+
+        th {
+            background-color: #f2f2f2;
         }
     </style>
 </head>
@@ -46,7 +64,7 @@
                     <label>
                         <input type="file" placeholder="Select one or more file" multiple @change="(e) => person.files = e.target.files"/>
                     </label><br/>
-                    <button type="submit">Submit</button>
+                    <button type="submit" :disabled="!(person.name && person.age)">Submit</button>
                     <button type="reset">Reset</button>
                 </fieldset>
             </form>
@@ -64,17 +82,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <template v-for="p in persons">
+                    <template v-for="(p, index) in persons">
                         <tr>
                             <td>{{ p.id }}</td>
                             <td>{{ p.name }}</td>
                             <td>{{ p.age }}</td>
-                            <td>expand</td>
+                            <td>
+                                <button @click="() => documentsCollapsableStore[index] = !documentsCollapsableStore[index]">
+                                    {{ documentsCollapsableStore[index] ? '-' : '+'}}
+                                </button>
+                            </td>
                         </tr>
-                        <tr>
-                            <td colspan="4">
-                                supported row
-<!--                                <pre>{{ p.documents }}</pre>-->
+                        <tr :style="{display: documentsCollapsableStore[index] ? '':'none'}">
+                            <td colspan="4" style="text-align: justify">
+                                <div style="display: flex">
+                                    <p v-if="p.documents.length == 0">No attachment found</p>
+                                    <div v-else style="display: flex">
+                                        <a href="#" v-for="docs in p.documents" style="margin-right: 10px">{{ docs.name }}</a>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     </template>
@@ -94,17 +120,24 @@
                 const message = ref('Hello vue!')
                 const person = ref({})
                 const persons = ref([])
+                const documentsCollapsableStore = ref({})
 
                 const savePerson = () => {
-                    console.log(person.value)
+                    console.log(person.value);
                     const formData = new FormData();
-                    //formData.append("id", person.id)
-                    formData.append("name", person.value.name)
-                    formData.append("age", person.value.age)
-                    formData.append("files", person.value.files)
-                    //formData.keys().forEach(k => console.log(`${k} - ${formData.get(k)}`))
-                    persistPerson(formData)
-                }
+                    formData.append("name", person.value.name);
+                    formData.append("age", person.value.age);
+
+                    // Append each file individually
+                    const files = person.value.files;
+                    if(files) {
+                        for (let i = 0; i < files.length; i++) {
+                            formData.append("files", files[i]);
+                        }
+                    }
+                    persistPerson(formData);
+                };
+
 
                 const persistPerson = (formData) => {
                     fetch(`${apiHost}/person`, {
@@ -135,7 +168,7 @@
                 })
 
                 return {
-                    message, person, persons, savePerson
+                    message, person, persons, savePerson, documentsCollapsableStore
                 }
             }
         }).mount('#app')

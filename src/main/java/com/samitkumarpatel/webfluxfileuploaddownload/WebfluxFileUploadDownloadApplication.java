@@ -1,6 +1,7 @@
 package com.samitkumarpatel.webfluxfileuploaddownload;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -23,9 +24,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.springframework.http.MediaType.MULTIPART_FORM_DATA;
 import static org.springframework.web.reactive.function.server.RequestPredicates.contentType;
@@ -65,13 +64,10 @@ public class WebfluxFileUploadDownloadApplication {
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 class FileHandler {
 	final FileService fileService;
 	public Mono<ServerResponse> upload(ServerRequest request) {
-
-		Map<String, String> formData = new HashMap<>();
-		Map<String, Flux<DataBuffer>> fileData = new HashMap<>();
-
 		return request
 				.multipartData()
 				.flatMap(stringPartMultiValueMap -> {
@@ -80,21 +76,14 @@ class FileHandler {
 
 					var ageFormFiledPart = (FormFieldPart) stringPartMultiValueMap.get("age").getFirst();
 					var age = ageFormFiledPart.value();
-
-					var files = stringPartMultiValueMap.get("files").stream().map(part -> (FilePart) part).toList();
-
-					System.out.printf("%s- %s - %s".formatted(name, age, files.stream().map(f -> f.filename()).toList()));
-
-					/*var docs = files
-							.stream()
-							.map(filePart ->  new Documents(null, filePart.filename(), null, null))
-							.collect(Collectors.toSet());
-					return new Person(null,name, Integer.parseInt(age), docs);*/
+					var files = Objects.requireNonNullElse(stringPartMultiValueMap.get("files"), List.of()).stream().map(part -> (FilePart) part).toList();
+					log.info("{} , {} has uploaded {} ", name, age, files.stream().map(FilePart::filename).toList());
 
 					return Flux.fromIterable(files)
 							.flatMap(f -> {
-								return DataBufferUtils.join(f.content()).map(dataBuffer -> new Documents(null, f.filename(), null, dataBuffer.asByteBuffer().array()));
-								//return Mono.fromCallable(() -> db);
+								return DataBufferUtils
+										.join(f.content())
+										.map(dataBuffer -> new Documents(null, f.filename(), null, dataBuffer.asByteBuffer().array()));
 							})
 							.collectList()
 							.map(Set::copyOf)
